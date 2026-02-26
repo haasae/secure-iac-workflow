@@ -1,0 +1,50 @@
+name: Terraform CI
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+      - 'policy/**'
+      - '.github/workflows/terraform.yml'
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      TF_IN_AUTOMATION: true
+      AWS_ACCESS_KEY_ID: dummy
+      AWS_SECRET_ACCESS_KEY: dummy
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform fmt
+        run: terraform -chdir=infra fmt -check -recursive
+
+      - name: Terraform init
+        run: terraform -chdir=infra init -input=false
+
+      - name: Terraform validate
+        run: terraform -chdir=infra validate
+
+      - name: Terraform plan
+        run: terraform -chdir=infra plan -input=false -lock=false -refresh=false -out=tfplan -var='bucket_name=secure-iac-workflow-ci-example'
+
+      - name: Terraform show (JSON plan)
+        run: terraform -chdir=infra show -json tfplan > infra/tfplan.json
+
+      - name: Policy check (public access block)
+        run: bash policy/check_public_access_block.sh
+
+      - name: Policy check (tfplan.json)
+        run: bash policy/check_tfplan_json.sh

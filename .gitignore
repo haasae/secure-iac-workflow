@@ -1,0 +1,22 @@
+# Local artifacts Terrafrom
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfplan
+*.plan
+*.tfplan.json
+*.plan.json
+
+# Sensitive variable files 
+*.tfvars
+*.tfvars.json
+
+# Terraform override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+infra/tfplan
+infra/tfplan.json
