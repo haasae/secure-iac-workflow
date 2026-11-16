@@ -16,13 +16,14 @@ To provision a bucket and enforce security controls, both in code and in CI befo
 ## Folder structure
 
 - `infra/` Terraform files
-- `policy/` policy check script used by CI
+- `policy/` Rego policies and their unit tests, run with Conftest
 - `.github/workflows/` GitHub Actions workflow
 
 ## Prerequisites
 
 - Terraform `>= 1.5`
 - A Git Bash terminal
+- [Conftest](https://www.conftest.dev/install/) `>= 0.70` (for the policy checks)
 - AWS credentials (if you want to run a real plan/apply against your account)
 
 ## Local run (quick start)
@@ -35,8 +36,8 @@ terraform -chdir=infra init
 terraform -chdir=infra validate
 terraform -chdir=infra plan -refresh=false -out=tfplan -var='bucket_name=your-unique-bucket-name'
 terraform -chdir=infra show -json tfplan > infra/tfplan.json
-bash policy/check_public_access_block.sh
-bash policy/check_tfplan_json.sh
+conftest verify --policy policy
+conftest test infra/tfplan.json --policy policy
 ```
 
 NOTE: Your bucket name must be unique! Therefore I recommend adding "$(Get-Random)" at the end of the name. For example:  
@@ -72,8 +73,8 @@ Use it as a secure object storage bucket. With the current setup, the most commo
 ## Possible future improvements
 1. Replacing AES256 with KMS encryption
 2. Adding lifecycle rules
-3. Replacing grep-based source policy checks with a real policy engine
-4. Adding bucket tags
+3. Adding bucket tags
+4. Extending the policies to child modules
 
 
 ## Notes on security
@@ -81,17 +82,19 @@ Use it as a secure object storage bucket. With the current setup, the most commo
 - The S3 bucket includes `aws_s3_bucket_public_access_block` with all four protections enabled.
 - S3 versioning is enabled to help with recovery from accidental changes/deletions.
 - S3 default server-side encryption is enabled (AES256).
-- The policy script is grep-based and is not meant as a full policy engine.
-- The JSON plan policy script validates the planned resources (public access block, versioning, and encryption) before applying.
+- The policies in `policy/s3.rego` are evaluated against the plan JSON, so they check what Terraform is about to do, not what the source files look like.
+- Every bucket must have its own public access block, versioning and encryption. One protected bucket does not cover another.
+- The policies only inspect the root module. Unknown values and non-plan input fail the check.
 - Do not commit real secrets or credential files! `.gitignore` excludes common Terraform state and variable files.
 
 ## CI behavior
 
 On every pull request, GitHub Actions runs:
 
+- Conftest install (pinned version, build provenance verified)
+- `conftest verify` (unit tests for the policies)
 - `terraform fmt -check`
 - `terraform validate`
 - `terraform plan`
-- `policy/check_public_access_block.sh`
 - `terraform show -json` (to generate `tfplan.json`)
-- `policy/check_tfplan_json.sh`
+- `conftest test` (policies against `tfplan.json`)
