@@ -7,6 +7,9 @@ on:
       - 'policy/**'
       - '.github/workflows/terraform.yml'
 
+permissions:
+  contents: read
+
 jobs:
   terraform:
     runs-on: ubuntu-latest
@@ -20,6 +23,7 @@ jobs:
       AWS_SECRET_ACCESS_KEY: dummy
       AWS_DEFAULT_REGION: us-east-1
       AWS_EC2_METADATA_DISABLED: true
+      CONFTEST_VERSION: "0.70.1"
 
     steps:
       - name: Checkout
@@ -27,6 +31,26 @@ jobs:
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+
+      # Pinned version, and the archive's build provenance is verified against
+      # Conftest's own release workflow before the binary is installed.
+      - name: Install Conftest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          archive="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSLO "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/${archive}"
+          gh attestation verify "$archive" \
+            --repo open-policy-agent/conftest \
+            --signer-workflow open-policy-agent/conftest/.github/workflows/release.yaml \
+            --source-ref "refs/tags/v${CONFTEST_VERSION}" \
+            --deny-self-hosted-runners
+          tar xzf "$archive" conftest
+          sudo mv conftest /usr/local/bin/conftest
+          conftest --version
+
+      - name: Policy unit tests
+        run: conftest verify --policy policy
 
       - name: Terraform fmt
         run: terraform -chdir=infra fmt -check -recursive
@@ -43,8 +67,5 @@ jobs:
       - name: Terraform show (JSON plan)
         run: terraform -chdir=infra show -json tfplan > infra/tfplan.json
 
-      - name: Policy check (public access block)
-        run: bash policy/check_public_access_block.sh
-
-      - name: Policy check (tfplan.json)
-        run: bash policy/check_tfplan_json.sh
+      - name: Policy check (Conftest on plan JSON)
+        run: conftest test infra/tfplan.json --policy policy
