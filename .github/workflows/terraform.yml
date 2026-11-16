@@ -53,7 +53,7 @@ jobs:
         run: conftest verify --policy policy
 
       - name: Terraform fmt
-        run: terraform -chdir=infra fmt -check -recursive
+        run: terraform -chdir=infra fmt -check -diff -recursive
 
       - name: Terraform init
         run: terraform -chdir=infra init -input=false

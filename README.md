@@ -1,6 +1,6 @@
 # secure-iac-workflow
 
-This is a secure Terraform starter workflow for AWS S3. 
+This is a secure Terraform workflow for AWS: an S3 bucket, an IAM role that can use it, and a small network, with policy checks that run on every pull request.
 
 ## Purpose
 
@@ -11,7 +11,9 @@ To provision a bucket and enforce security controls, both in code and in CI befo
 1. Creates an S3 bucket with versioning enabled
 2. Enforces S3 public access block settings
 3. Enforces default server-side encryption (AES256)
-4. A policy gate in CI checks that Terrafrorm plan JSON has the required secure resources/settings
+4. Creates an IAM role for an EC2 application, limited to listing this bucket and reading/writing its objects
+5. Creates a VPC and a security group that only accepts HTTPS from inside the VPC
+6. A policy gate in CI checks the Terraform plan JSON against the policies in `policy/`
 
 ## Folder structure
 
@@ -46,7 +48,7 @@ NOTE: Your bucket name must be unique! Therefore I recommend adding "$(Get-Rando
 ```
 ## Apply
 
-Finally, if you want to create the bucket in AWS:
+Finally, if you want to create the resources in AWS (bucket, IAM role, VPC and security group):
 
 ```bash
 terraform -chdir=infra apply -var='bucket_name=your-unique-bucket-name'
@@ -84,7 +86,10 @@ Use it as a secure object storage bucket. With the current setup, the most commo
 - S3 default server-side encryption is enabled (AES256).
 - The policies in `policy/s3.rego` are evaluated against the plan JSON, so they check what Terraform is about to do, not what the source files look like.
 - Every bucket must have its own public access block, versioning and encryption. One protected bucket does not cover another.
-- The policies only inspect the root module. Unknown values and non-plan input fail the check.
+- The S3 policies only inspect the root module. Unknown values and non-plan input fail the check.
+- `policy/iam.rego` rejects wildcard actions, `NotAction`, `Resource "*"` and wildcard principals in trust policies. A policy document that is unknown at plan time is rejected, because it cannot be read.
+- `policy/network.rego` rejects security group ingress from `0.0.0.0/0` and `::/0`.
+- Each policy file lists its known limits at the top.
 - Do not commit real secrets or credential files! `.gitignore` excludes common Terraform state and variable files.
 
 ## CI behavior
